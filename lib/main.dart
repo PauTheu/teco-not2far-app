@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:location/location.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong/latlong.dart';
 import 'package:validators/validators.dart';
+import 'package:flutter_blue/flutter_blue.dart';
 
 void main() => runApp(MyApp());
 
@@ -36,7 +39,14 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   final formKey = GlobalKey<FormState>();
-  String in1 = '';
+  FlutterBlue flutterBlue = FlutterBlue.instance;
+
+
+
+
+  int criticalDistance = 500;
+  double currentDistance = 0;
+
   double homelon;
   double homelat;
 
@@ -48,6 +58,15 @@ class _MyHomePageState extends State<MyHomePage> {
   double meter = 0;
 
   int anzIcon = 0;
+
+  BluetoothDevice tecoDevice;
+  StreamSubscription<ScanResult> sub;
+  bool connectionStatus = false;
+
+  BluetoothCharacteristic btc;
+
+
+
 
   void setCurrentLocation() async {
     LocationData currentLocation;
@@ -66,10 +85,30 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   void initState() {
     super.initState();
     setCurrentLocation();
     calculate();
+    startScan();
+
   }
 
   Widget hspace(double x) {
@@ -81,11 +120,11 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Widget output1() {
-    return Text('critical distance: $in1');
+    return Text('critical distance: $criticalDistance');
   }
 
   Widget output2() {
-    return Text('current distance: $meter');
+    return Text('current distance: $currentDistance');
   }
 
   Widget row1() {
@@ -102,7 +141,7 @@ class _MyHomePageState extends State<MyHomePage> {
             splashColor: Colors.deepOrangeAccent,
         ),
         wspace(50),
-        Text('$homelat / $homelon'),
+        Text('Lat: $homelat\nLon: $homelon'),
       ],
     );
   }
@@ -112,7 +151,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
       keyboardType: TextInputType.number,
       decoration: new InputDecoration(
-          labelText: "Please enter Distance in meter",
+          labelText: "Please enter distance in meter",
           fillColor: Colors.white,
           border: new OutlineInputBorder(
             borderRadius: new BorderRadius.circular(25.0),
@@ -130,7 +169,7 @@ class _MyHomePageState extends State<MyHomePage> {
           formKey.currentState.save();
           setState(
                 () {
-              in1 = value;
+              criticalDistance = int.parse(value);
             },
           );
           formKey.currentState.reset();
@@ -160,40 +199,134 @@ class _MyHomePageState extends State<MyHomePage> {
       accuracy: LocationAccuracy.HIGH,
       interval: 2,
     );
-    location.onLocationChanged().listen((LocationData currentLocation) {
+    location.onLocationChanged().listen((LocationData currentLocation) async {
+      int anzIconNeu = 0;
+      latitude = currentLocation.latitude;
+      longitude = currentLocation.longitude;
+      Distance distance = new Distance();
+
       setState(() {
-        latitude = currentLocation.latitude;
-        longitude = currentLocation.longitude;
-        speed = (currentLocation.speed * 3.6);
-        Distance distance = new Distance();
-        meter = distance(
+        currentDistance = distance(
             new LatLng(homelat, homelon), new LatLng(latitude, longitude));
-        int critical = int.parse(in1);
-        anzIcon = 0;
-        if (meter > critical) {
-          anzIcon = 1;
-        }
-        if (meter > critical * 1.25) {
-          anzIcon = 2;
-        }
-        if (meter > critical * 1.5) {
-          anzIcon = 3;
-        }
-        if (meter > critical * 2) {
-          anzIcon = 4;
-        }
       });
+
+      if (currentDistance >= criticalDistance) {
+        anzIconNeu = 1;
+        // btc.write([0xFF, 0x00, 0x00, 0x00]);
+
+      }
+      if (currentDistance >= criticalDistance * 1.25) {
+        anzIconNeu = 2;
+        // btc.write([0xFF, 0xFF, 0x00, 0x00]);
+
+      }
+      if (currentDistance >= criticalDistance * 1.5) {
+        anzIconNeu = 3;
+        // btc.write([0xFF, 0xFF, 0xFF, 0x00]);
+      }
+      if (currentDistance >= criticalDistance * 2) {
+        anzIconNeu = 4;
+        // btc.write([0xFF, 0xFF, 0xFF, 0xFF]);
+      }
+
+      if (anzIconNeu != anzIcon) {
+        setState(() {
+          anzIcon = anzIconNeu;
+        });
+
+        if (anzIconNeu == 0) {
+          await btc.write([0x00, 0x00, 0x00, 0x00]);
+        } else if (anzIconNeu == 1) {
+          await btc.write([0xFF, 0x00, 0x00, 0x00]);
+        } else if (anzIconNeu == 2) {
+          await btc.write([0xFF, 0xFF, 0x00, 0x00]);
+        } else if (anzIconNeu == 3) {
+          await btc.write([0xFF, 0xFF, 0xFF, 0x00]);
+        } else if (anzIconNeu == 4) {
+          await btc.write([0xFF, 0xFF, 0xFF, 0xFF]);
+        }
+      }
     });
   }
+
+  void startScan() {
+    sub = flutterBlue.scan().listen((scanResult) {
+      if (scanResult.device.name.contains('TECO')) {
+        setState(() {
+          tecoDevice = scanResult.device;
+          sub.cancel();
+        });
+      }
+    });
+  }
+
+  Future connect() async {
+    await tecoDevice.connect();
+    setState(() {
+      connectionStatus = true;
+    });
+
+    List<BluetoothService> services = await tecoDevice.discoverServices();
+    services.forEach((BluetoothService service) async {
+      if (service.uuid.toString() == '713d0000-503e-4c75-ba94-3148f18d941e') {
+        var characteristics = service.characteristics;
+        for (BluetoothCharacteristic c in characteristics) {
+          if (c.uuid.toString() == '713d0003-503e-4c75-ba94-3148f18d941e') {
+            btc = c;
+          }
+
+        }
+      }
+    });
+  }
+
+
+  void disconnect() {
+    if (tecoDevice != null) {
+      tecoDevice.disconnect();
+    }
+    setState(() {
+      connectionStatus = false;
+    });
+  }
+
+  Widget showinfo() {
+    String text = '';
+    String status = 'disconnected';
+    if (connectionStatus) status = "connected";
+
+    if (tecoDevice != null) text = tecoDevice.name;
+    return Text('tecoDevice = $text \nstatus = $status');
+  }
+
+
+
+
+
+
+
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
 
       appBar: AppBar(
+        
 
-        title: Text(widget.title),
-      ),
+        title: Text(widget.title), actions: <Widget>[
+        IconButton(
+          icon: Icon(Icons.bluetooth),
+          onPressed: () {
+            if (connectionStatus) {
+              disconnect();
+            } else {
+              connect();
+            }
+          },
+        )
+      ]),
+
       body: Container(
 
         margin: EdgeInsets.all(20.0),
@@ -202,15 +335,17 @@ class _MyHomePageState extends State<MyHomePage> {
           key: formKey,
           child: Column(children: <Widget>[
 
-            hspace(30),
+            showinfo(),
             row1(),
             hspace(20),
             input1(),
             hspace(20),
             output1(),
             hspace(20),
+
             output2(),
             output3(),
+
           ]),
         ),
       ),

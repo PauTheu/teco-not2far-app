@@ -1,11 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:location/location.dart';
 import 'package:flutter/services.dart';
-import 'package:latlong/latlong.dart';
 import 'package:validators/validators.dart';
 import 'package:flutter_blue/flutter_blue.dart';
+import 'animated_circle_widget.dart';
+import 'blinking_circle_widget.dart';
+import 'text_widget.dart';
 
 void main() => runApp(MyApp());
 
@@ -50,8 +51,6 @@ class _MyHomePageState extends State<MyHomePage> {
 
   String proximity;
 
-  int anzIcon = 1;
-
   BluetoothDevice eslDevice;
   StreamSubscription<ScanResult> sub;
   bool connectionStatus = false;
@@ -66,16 +65,20 @@ class _MyHomePageState extends State<MyHomePage> {
     return Container(height: x);
   }
 
-  Widget wspace(double x) {
-    return Container(width: x);
-  }
-
-  Widget RssiValueWidget() {
-    return Text('Rssi: -40');
-  }
-
-  Widget ProximityValueWidget() {
-    return Text('Proximity: nah');
+  Widget SearchButton() {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        primary: Colors.blue,
+        onPrimary: Colors.white,
+        shadowColor: Colors.blueAccent,
+        elevation: 3,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(32.0)),
+        minimumSize: Size(200, 60),
+      ),
+      onPressed: () {},
+      child: Text('Suche starten'),
+    );
   }
 
   Widget startSearchButtonWidget() {
@@ -118,32 +121,6 @@ class _MyHomePageState extends State<MyHomePage> {
       },
     );
   }
-
-  Widget DistanceIconWidget() {
-    return Container(
-      padding: EdgeInsets.all(10.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          anzIcon >= 1 ? Icon(Icons.directions_run) : Container(),
-          anzIcon >= 2 ? Icon(Icons.directions_run) : Container(),
-          anzIcon >= 3 ? Icon(Icons.directions_run) : Container(),
-          anzIcon >= 4 ? Icon(Icons.directions_run) : Container(),
-        ],
-      ),
-    );
-  }
-
-/* if (anzIconNeu == 0) {
-  await btc.write([0x00, 0x00, 0x00, 0x00]);
-} else if (anzIconNeu == 1) {
-  await btc.write([0xFF, 0x00, 0x00, 0x00]);
-} else if (anzIconNeu == 2) {
-  await btc.write([0xFF, 0xFF, 0x00, 0x00]);
-} else if (anzIconNeu == 3) {
-  await btc.write([0xFF, 0xFF, 0xFF, 0x00]);
-} else if (anzIconNeu == 4) {
-  await btc.write([0xFF, 0xFF, 0xFF, 0xFF]); */
 
   void startSearch() {
     sub = flutterBlue.scan().listen((scanResult) {
@@ -202,13 +179,9 @@ class _MyHomePageState extends State<MyHomePage> {
             hspace(20),
             tagInputWidget(),
             hspace(20),
-            startSearchButtonWidget(),
-            hspace(20),
-            RssiValueWidget(),
-            hspace(20),
-            ProximityValueWidget(),
-            hspace(20),
-            DistanceIconWidget(),
+            SearchButton(),
+            hspace(100),
+            BlinkingCircle(radius: 50, text: '2m entfernt')
           ]),
         ),
       ),
